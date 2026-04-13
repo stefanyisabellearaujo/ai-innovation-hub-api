@@ -153,11 +153,11 @@ Documentação completa e interativa: **http://localhost:8000/docs**
 | **Tarefa** | Zero-shot text classification (NLI) |
 | **Licenca do modelo** | MIT License |
 | **Termos de uso da API** | [HuggingFace Terms of Service](https://huggingface.co/terms-of-service) |
-| **Endpoint** | `POST https://router.huggingface.co/hf-inference/models/facebook/bart-large-mnli` |
+| **Endpoint externo** | `POST https://router.huggingface.co/hf-inference/models/facebook/bart-large-mnli` |
 | **Cadastro obrigatorio** | Sim — conta gratuita em [huggingface.co](https://huggingface.co) |
-| **Credencial** | Bearer token configurado em `HUGGINGFACE_TOKEN` no `.env` |
-| **Plano gratuito** | Disponivel, com rate limits (429 tratado com fallback automatico) |
-| **Cold start** | Modelos inativos podem retornar 503; o servico retenta uma vez apos 2 s |
+| **Credencial** | Bearer token em `HUGGINGFACE_TOKEN` no `.env` |
+| **Plano gratuito** | Disponivel com rate limits — 429 tratado com fallback automatico |
+| **Cold start** | Modelo inativo pode retornar 503; o servico retenta uma vez apos 2 s |
 
 #### Para obter o token
 
@@ -169,28 +169,77 @@ Documentação completa e interativa: **http://localhost:8000/docs**
    HUGGINGFACE_TOKEN=hf_xxxxxxxxxxxxxxxxxxxx
    ```
 
-#### Rotas que chamam esta API
-
-| Rota | Metodo | Por que usa a API |
-|------|--------|-------------------|
-| `/api/ideas` | POST | Categoriza automaticamente a ideia no momento da criacao |
-| `/api/ideas/{id}` | PUT | Re-categoriza quando titulo ou descricao sao alterados |
-| `/api/ai/categorize` | POST | Endpoint direto para categorizar texto on-demand pelo frontend |
-| `/api/ai/similar` | POST | Usa a categoria da ideia como sinal para ranquear similaridade |
-
 #### Categorias classificadas
 
-O modelo classifica textos em uma destas categorias predefinidas:
+O modelo classifica textos em uma destas categorias:
+`Natural Language Processing` · `Computer Vision` · `Process Automation` · `Data Analytics` · `Generative AI`
 
-- `Natural Language Processing`
-- `Computer Vision`
-- `Process Automation`
-- `Data Analytics`
-- `Generative AI`
+Se nenhuma categoria for identificada com confianca, ou se a API falhar, o valor de fallback e `"Other"`.
 
-#### Comportamento sem o token ou em caso de falha
+---
 
-Se `HUGGINGFACE_TOKEN` nao estiver configurado ou a API retornar erro (timeout, 503, 429, 401), **o sistema nao trava**: a ideia e salva com a categoria `"Other"`. Nenhuma funcionalidade critica e bloqueada pela indisponibilidade da API.
+#### Rotas que chamam esta API — detalhamento
+
+**`POST /api/ideas` — Criacao de ideia**
+
+Chamada: sempre que uma ideia e criada.
+O que e enviado: a `description` da ideia como `inputs` com as 5 categorias como `candidate_labels`.
+O que e usado: o label com maior score vira o campo `category` salvo no banco.
+Falha: ideia e salva normalmente com `category = "Other"`.
+
+---
+
+**`PUT /api/ideas/{id}` — Edicao de ideia**
+
+Chamada: somente se `title` ou `description` forem alterados. Mudancas apenas de `status` nao disparam a API.
+O que e enviado: a descricao atualizada da ideia.
+O que e usado: o novo label substitui o `category` existente.
+Falha: `category` e sobrescrito com `"Other"`. O restante da atualizacao e salvo normalmente.
+
+---
+
+**`POST /api/ai/categorize` — Categorizacao direta**
+
+Chamada: on-demand pelo frontend (ex: previa de categoria enquanto o usuario escreve).
+Body: `{ "description": "texto" }`
+Resposta:
+```json
+{
+  "category": "Natural Language Processing",
+  "scores": {
+    "Natural Language Processing": 0.72,
+    "Computer Vision": 0.10,
+    "Process Automation": 0.08,
+    "Data Analytics": 0.06,
+    "Generative AI": 0.04
+  }
+}
+```
+Falha: retorna `{ "category": "Other", "scores": {} }`.
+
+---
+
+**`POST /api/ai/similar` — Ideias similares**
+
+Chamada: quando o usuario busca ideias parecidas antes de criar uma nova.
+Como a API e usada internamente:
+1. A descricao e enviada para a HuggingFace para obter a categoria
+2. Todas as ideias do banco sao carregadas e pontuadas por similaridade de tokens (Sorensen-Dice)
+3. Ideias com a mesma categoria recebem bonus de `+0.15` no score final
+4. Retorna ate 5 ideias com score >= 0.25, ordenadas por relevancia
+
+Falha: o algoritmo de similaridade continua funcionando sem o bonus de categoria. Nenhum resultado e perdido.
+
+---
+
+#### Resumo
+
+| Rota | Metodo | Dispara HuggingFace? | Condicao |
+|------|--------|----------------------|----------|
+| `/api/ideas` | POST | Sempre | Criacao de ideia |
+| `/api/ideas/{id}` | PUT | Somente se `title` ou `description` mudar | Edicao de conteudo |
+| `/api/ai/categorize` | POST | Sempre | Chamada direta |
+| `/api/ai/similar` | POST | Sempre | Busca de similares |
 
 ---
 
