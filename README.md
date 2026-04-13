@@ -143,6 +143,57 @@ Documentação completa e interativa: **http://localhost:8000/docs**
 
 ---
 
+## APIs Externas
+
+### HuggingFace Inference API
+
+| Item | Detalhe |
+|------|---------|
+| **Modelo** | `facebook/bart-large-mnli` |
+| **Tarefa** | Zero-shot text classification (NLI) |
+| **Licenca do modelo** | MIT License |
+| **Termos de uso da API** | [HuggingFace Terms of Service](https://huggingface.co/terms-of-service) |
+| **Endpoint** | `POST https://router.huggingface.co/hf-inference/models/facebook/bart-large-mnli` |
+| **Cadastro obrigatorio** | Sim — conta gratuita em [huggingface.co](https://huggingface.co) |
+| **Credencial** | Bearer token configurado em `HUGGINGFACE_TOKEN` no `.env` |
+| **Plano gratuito** | Disponivel, com rate limits (429 tratado com fallback automatico) |
+| **Cold start** | Modelos inativos podem retornar 503; o servico retenta uma vez apos 2 s |
+
+#### Para obter o token
+
+1. Crie uma conta gratuita em [huggingface.co](https://huggingface.co)
+2. Acesse [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+3. Crie um token com permissao de leitura (_Read_)
+4. Adicione ao `.env`:
+   ```
+   HUGGINGFACE_TOKEN=hf_xxxxxxxxxxxxxxxxxxxx
+   ```
+
+#### Rotas que chamam esta API
+
+| Rota | Metodo | Por que usa a API |
+|------|--------|-------------------|
+| `/api/ideas` | POST | Categoriza automaticamente a ideia no momento da criacao |
+| `/api/ideas/{id}` | PUT | Re-categoriza quando titulo ou descricao sao alterados |
+| `/api/ai/categorize` | POST | Endpoint direto para categorizar texto on-demand pelo frontend |
+| `/api/ai/similar` | POST | Usa a categoria da ideia como sinal para ranquear similaridade |
+
+#### Categorias classificadas
+
+O modelo classifica textos em uma destas categorias predefinidas:
+
+- `Natural Language Processing`
+- `Computer Vision`
+- `Process Automation`
+- `Data Analytics`
+- `Generative AI`
+
+#### Comportamento sem o token ou em caso de falha
+
+Se `HUGGINGFACE_TOKEN` nao estiver configurado ou a API retornar erro (timeout, 503, 429, 401), **o sistema nao trava**: a ideia e salva com a categoria `"Other"`. Nenhuma funcionalidade critica e bloqueada pela indisponibilidade da API.
+
+---
+
 ## Decisões técnicas
 
 | Decisão | Escolha | Motivo |
